@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Namotávání">
+<title>Namotávání</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;position:fixed;inset:0;background:#f4efe6;
+    -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
+    font-family:-apple-system,system-ui,sans-serif;}
+  canvas{display:block;touch-action:none;}
+  button{touch-action:manipulation;font-family:inherit;-webkit-tap-highlight-color:transparent;color:#333;}
+  #gear{position:fixed;top:calc(16px + env(safe-area-inset-top));right:16px;width:56px;height:56px;
+    border-radius:50%;background:rgba(0,0,0,.06);display:flex;align-items:center;justify-content:center;
+    font-size:26px;z-index:5;opacity:.5;overflow:hidden;touch-action:none;}
+  #gear::after{content:"";position:absolute;inset:0;border-radius:50%;background:rgba(127,176,105,.6);
+    transform:scale(0);transition:transform .2s;}
+  #gear.hold::after{transform:scale(1);transition:transform 1.5s linear;}
+  #again{position:fixed;bottom:calc(150px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);
+    display:none;z-index:6;font-size:34px;padding:24px 56px;border-radius:28px;border:none;
+    background:#7fb069;color:#fff;box-shadow:0 6px 20px rgba(0,0,0,.15);}
+  #autoBar{position:fixed;bottom:calc(24px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);
+    display:flex;gap:12px;align-items:center;z-index:5;background:rgba(255,255,255,.75);padding:10px;
+    border-radius:28px;box-shadow:0 4px 16px rgba(0,0,0,.1);}
+  #autoBtn{font-size:28px;padding:16px 26px;border-radius:20px;border:none;background:#7fb069;color:#fff;min-width:180px;}
+  #autoBtn.on{background:#e8a33d;}
+  .spd{display:flex;gap:8px;}
+  .spd button{font-size:32px;width:72px;height:72px;border-radius:20px;border:3px solid transparent;background:#f3ede2;}
+  .spd button.sel{border-color:#7fb069;background:#e4f0dc;}
+  #viewBar{position:fixed;left:calc(16px + env(safe-area-inset-left));top:50%;transform:translateY(-50%);
+    display:flex;flex-direction:column;gap:10px;z-index:5;}
+  #viewBar button{font-size:18px;width:112px;padding:14px 0;border-radius:18px;border:3px solid transparent;
+    background:rgba(255,255,255,.8);box-shadow:0 3px 10px rgba(0,0,0,.08);}
+  #viewBar button.sel{border-color:#7fb069;background:#e4f0dc;}
+  #hint{position:fixed;left:0;top:0;width:0;height:0;pointer-events:none;z-index:4;}
+  #hint span{position:absolute;left:-80px;top:-80px;width:160px;height:160px;display:flex;align-items:center;
+    justify-content:center;font-size:150px;line-height:1;color:#7fb069;opacity:.45;animation:rot 2.5s linear infinite;}
+  @keyframes rot{to{transform:rotate(360deg)}}
+  #err{position:fixed;inset:0;display:none;align-items:center;justify-content:center;text-align:center;
+    font-size:22px;padding:40px;z-index:30;background:#f4efe6;}
+  #panel{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;z-index:20;align-items:center;justify-content:center;}
+  .box{background:#fff;border-radius:24px;padding:24px 28px;width:min(660px,92vw);max-height:88vh;overflow-y:auto;box-sizing:border-box;}
+  .box h2{margin:0 0 12px;font-size:26px;}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;
+    border-bottom:1px solid #eee;font-size:18px;flex-wrap:wrap;}
+  .opts{display:flex;gap:8px;flex-wrap:wrap;}
+  .opts button{font-size:17px;padding:10px 16px;border-radius:14px;border:2px solid #ddd;background:#fafafa;}
+  .opts button.sel{background:#7fb069;border-color:#7fb069;color:#fff;}
+  .opts button.sw{width:44px;height:44px;padding:0;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 2px #ddd;}
+  .opts button.sw.sel{box-shadow:0 0 0 4px #333;}
+  input[type=range]{width:220px;}
+  .btns{display:flex;gap:12px;justify-content:flex-end;margin-top:18px;}
+  .btns button{font-size:18px;padding:12px 22px;border-radius:14px;border:none;}
+  #resetBtn{background:#f0e6d6;} #closeBtn{background:#7fb069;color:#fff;}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hint"><span>↻</span></div>
+<div id="gear">⚙️</div>
+<button id="again">🔄 Znovu</button>
+
+<div id="viewBar">
+  <button data-view="angle">Šikmo</button>
+  <button data-view="side">Z boku</button>
+  <button data-view="front">Zepředu</button>
+  <button data-view="top">Shora</button>
+</div>
+
+<div id="camPad">
+  <button data-c="rollL" class="tilt">↶</button>
+  <button data-c="up">▲&#xFE0E;</button>
+  <button data-c="rollR" class="tilt">↷</button>
+  <button data-c="left">◀&#xFE0E;</button>
+  <button data-c="reset" class="home">🏠</button>
+  <button data-c="right">▶&#xFE0E;</button>
+  <button data-c="zoomOut" class="zoom">−</button>
+  <button data-c="down">▼&#xFE0E;</button>
+  <button data-c="zoomIn" class="zoom">+</button>
+</div>
+
+<div id="autoBar">
+  <button id="autoBtn">▶️ Samo</button>
+  <div class="spd">
+    <button data-s="slow">🐢</button><button data-s="mid">🚶</button><button data-s="fast">🐇</button>
+  </div>
+</div>
+
+<div id="err">Nepodařilo se načíst 3D grafiku.<br>Při prvním spuštění je potřeba připojení k internetu.</div>
+
+<div id="panel"><div class="box">
+  <h2>Nastavení</h2>
+  <div class="row"><span>Materiál</span><div class="opts" data-k="material">
+    <button data-v="paper">🧻 Papír</button><button data-v="yarn">🧶 Vlna</button></div></div>
+  <div class="row" id="colorRow"><span>Barva vlny</span><div class="opts" data-k="color">
+    <button class="sw" data-v="#e05a5a" style="background:#e05a5a"></button>
+    <button class="sw" data-v="#4f8fd6" style="background:#4f8fd6"></button>
+    <button class="sw" data-v="#6cbf6a" style="background:#6cbf6a"></button>
+    <button class="sw" data-v="#f2b134" style="background:#f2b134"></button>
+    <button class="sw" data-v="#a070d0" style="background:#a070d0"></button>
+    <button class="sw" data-v="#f08cb4" style="background:#f08cb4"></button></div></div>
+  <div class="row"><span>Délka</span><div class="opts" data-k="length">
+    <button data-v="short">Krátká</button><button data-v="medium">Střední</button><button data-v="long">Dlouhá</button></div></div>
+  <div class="row"><span>Hlasitost</span><input type="range" id="vol" min="0" max="1" step="0.05"></div>
+  <div class="row"><span>Zvuk ke konci</span><div class="opts" data-k="pitch">
+    <button data-v="up">Stoupá ⬆</button><button data-v="down">Klesá ⬇</button></div></div>
+  <div class="row"><span>Opačný směr točení</span><div class="opts" data-k="reverse">
+    <button data-v="wind">Taky navíjí</button><button data-v="unwind">Odmotává</button></div></div>
+  <div class="row"><span>Cvaknutí za otáčku</span><div class="opts" data-k="ticks">
+    <button data-v="on">Ano</button><button data-v="off">Ne</button></div></div>
+  <div class="row"><span>Melodie na konci</span><div class="opts" data-k="endSound">
+    <button data-v="on">Ano</button><button data-v="off">Ne</button></div></div>
+  <div class="row"><span>Po konci (Samo)</span><div class="opts" data-k="loop">
+    <button data-v="off">Čekat</button><button data-v="on">Začít znovu sám</button></div></div>
+  <div class="row"><span>Tlačítka Samo</span><div class="opts" data-k="autoBtns">
+    <button data-v="on">Ukázat</button><button data-v="off">Skrýt</button></div></div>
+  <div class="row"><span>Tlačítka pohledu</span><div class="opts" data-k="viewBtns">
+    <button data-v="on">Ukázat</button><button data-v="off">Skrýt</button></div></div>
+  <div class="row"><span>Otáčení pohledu 2 prsty</span><div class="opts" data-k="twoFinger">
+    <button data-v="on">Ano</button><button data-v="off">Ne</button></div></div>
+  <div class="btns"><button id="resetBtn">Začít znovu</button><button id="closeBtn">Zavřít</button></div>
+</div></div>
+
+<script>setTimeout(()=>{ if(!window.__ok) document.getElementById('err').style.display='flex'; },8000);</script>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+window.__ok = true;
+
+// ================= Nastavení =================
+const DEF={material:'paper',color:'#e05a5a',length:'medium',volume:0.7,pitch:'up',reverse:'wind',ticks:'off',
+  endSound:'on',autoSpeed:'mid',loop:'off',view:'angle',viewBtns:'on',autoBtns:'on',twoFinger:'on'};
+let S=Object.assign({},DEF);
+try{Object.assign(S,JSON.parse(localStorage.getItem('namotavani3d')||'{}'));}catch(e){}
+const save=()=>{try{localStorage.setItem('namotavani3d',JSON.stringify(S));}catch(e){}};
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+// ================= Rozměry a stav =================
+const ROD_Y=1.6, SRC_Y=0.8, SRC_Z=-1.4, R0=0.12;
+const MAT={paper:{rMax:0.6,rsMax:0.55,rc:0.18,w:1.0}, yarn:{rMax:0.5,rsMax:0.5,rc:0,w:1.2}};
+const TURNS={short:12,medium:30,long:60};
+const SPEEDS={slow:3,mid:7,fast:14};
+let C=MAT[S.material], total=1;
+function recompute(){ C=MAT[S.material]; total=TURNS[S.length]*2*Math.PI*(R0+C.rMax)/2; }
+recompute();
+let p=0, angle=0, srcAngle=0, vel=0, sSm=0, turnAcc=0, totalTurn=0, finished=false, auto=false, loopT=null;
+let touching=false, pid=null, lastA=0, lastY=0, lastMoveT=0;
+const rW=()=>Math.sqrt(R0*R0+(C.rMax*C.rMax-R0*R0)*p);
+const rS=()=>S.material==='paper'
+  ? Math.sqrt(C.rc*C.rc+(C.rsMax*C.rsMax-C.rc*C.rc)*(1-p))
+  : C.rsMax*Math.cbrt(Math.max(0,1-p));
+
+// ================= 3D scéna =================
+const cv=document.getElementById('c');
+const renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+const scene=new THREE.Scene(); scene.background=new THREE.Color('#f4efe6');
+const camera=new THREE.PerspectiveCamera(40,1,0.1,100);
+
+scene.add(new THREE.HemisphereLight(0xffffff,0xcdb894,1.4));
+const sun=new THREE.DirectionalLight(0xffffff,2.2);
+sun.position.set(3,6,4); sun.castShadow=true; sun.shadow.mapSize.set(1024,1024);
+Object.assign(sun.shadow.camera,{left:-4,right:4,top:4,bottom:-4,near:1,far:20});
+sun.shadow.bias=-0.0005; scene.add(sun);
+
+function shade(hex,a){
+  const c=parseInt(hex.slice(1),16), f=v=>clamp(Math.round(v+a*255),0,255);
+  return `rgb(${f(c>>16)},${f(c>>8&255)},${f(c&255)})`;
+}
+function tex(w,h,fn){
+  const c=document.createElement('canvas'); c.width=w; c.height=h; fn(c.getContext('2d'),w,h);
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace;
+  t.wrapS=t.wrapT=THREE.RepeatWrapping; t.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
+  return t;
+}
+const woodTex=(base,dark)=>tex(256,256,(g,w,h)=>{
+  g.fillStyle=base; g.fillRect(0,0,w,h);
+  for(let i=0;i<40;i++){
+    g.strokeStyle=dark; g.globalAlpha=0.12+Math.random()*0.25; g.lineWidth=1+Math.random()*3;
+    const x=Math.random()*w; g.beginPath(); g.moveTo(x,0);
+    g.bezierCurveTo(x+Math.random()*20-10,h/3,x+Math.random()*20-10,2*h/3,x,h); g.stroke();
+  }
+  g.globalAlpha=1;
+});
+const rodCapTex=tex(256,256,(g)=>{
+  g.fillStyle='#c8955b'; g.fillRect(0,0,256,256);
+  g.strokeStyle='#a5713c'; g.lineWidth=3;
+  for(let i=1;i<6;i++){g.beginPath();g.arc(128,128,i*22,0,7);g.stroke();}
+  g.strokeStyle='#6b4420'; g.lineWidth=16; g.lineCap='round';
+  g.beginPath(); g.moveTo(128,128); g.lineTo(128,18); g.stroke();
+  g.fillStyle='#6b4420'; g.beginPath(); g.arc(128,128,12,0,7); g.fill();
+});
+const paperSideTex=tex(512,128,(g,w,h)=>{
+  g.fillStyle='#fbf8f0'; g.fillRect(0,0,w,h);
+  g.fillStyle='#ebe3d0';
+  for(let x=8;x<w;x+=16) for(let y=8;y<h;y+=16){g.beginPath();g.arc(x+((y-8)/16%2)*8,y,2.5,0,7);g.fill();}
+  g.strokeStyle='#d6cbb2'; g.lineWidth=3; g.setLineDash([6,6]);
+  for(let i=0;i<4;i++){const x=i*w/4+2; g.beginPath(); g.moveTo(x,0); g.lineTo(x,h); g.stroke();}
+});
+const paperCapTex=tex(256,256,(g)=>{
+  g.fillStyle='#fbf8f0'; g.fillRect(0,0,256,256);
+  g.strokeStyle='#e6dcc6'; g.lineWidth=1;
+  for(let r=6;r<128;r+=4){g.beginPath();g.arc(128,128,r,0,7);g.stroke();}
+});
+const coreCapTex=tex(128,128,(g)=>{
+  g.fillStyle='#c49a6c'; g.fillRect(0,0,128,128);
+  g.fillStyle='#5e4129'; g.beginPath(); g.arc(64,64,46,0,7); g.fill();
+});
+const yarnSideTex=col=>tex(512,256,(g,w,h)=>{
+  g.fillStyle=col; g.fillRect(0,0,w,h);
+  for(let i=0;i<60;i++){
+    g.strokeStyle=i%2?shade(col,-0.15):shade(col,0.1); g.lineWidth=3;
+    const y=Math.random()*h; g.beginPath(); g.moveTo(0,y); g.lineTo(w,y); g.stroke();
+  }
+  g.lineWidth=4;
+  for(let i=0;i<24;i++){
+    const x0=i*w/24;
+    for(const off of [0,-w]){
+      g.strokeStyle=shade(col,-0.22); g.beginPath(); g.moveTo(x0+off,0); g.lineTo(x0+off+w/3,h); g.stroke();
+      g.strokeStyle=shade(col,0.14); g.beginPath(); g.moveTo(x0+off,h); g.lineTo(x0+off+w/3,0); g.stroke();
+    }
+  }
+});
+const yarnCapTex=col=>tex(256,256,(g)=>{
+  g.fillStyle=col; g.fillRect(0,0,256,256);
+  for(let r=4;r<128;r+=5){g.strokeStyle=(r/5)%2?shade(col,-0.14):shade(col,0.1);g.lineWidth=3;g.beginPath();g.arc(128,128,r,0,7);g.stroke();}
+});
+const yarnBallTex=col=>tex(512,256,(g,w,h)=>{
+  g.fillStyle=col; g.fillRect(0,0,w,h);
+  for(let i=0;i<70;i++){
+    g.strokeStyle=i%2?shade(col,-0.2):shade(col,0.13); g.lineWidth=3+Math.random()*2;
+    const y0=Math.random()*h, A=10+Math.random()*60, f=1+Math.floor(Math.random()*3), ph=Math.random()*6.28;
+    g.beginPath();
+    for(let x=0;x<=w;x+=8){const y=y0+A*Math.sin(2*Math.PI*f*x/w+ph); x?g.lineTo(x,y):g.moveTo(x,y);}
+    g.stroke();
+  }
+});
+
+const stdM=o=>new THREE.MeshStandardMaterial(Object.assign({roughness:0.8,metalness:0},o));
+const woodM=stdM({map:woodTex('#c8955b','#7a4f26'),roughness:0.6});
+const baseM=stdM({map:woodTex('#e3c79f','#b08657'),roughness:0.7});
+const rodCapM=stdM({map:rodCapTex,roughness:0.6});
+const paperSideM=stdM({map:paperSideTex,roughness:0.95});
+const paperCapM=stdM({map:paperCapTex,roughness:0.95});
+const coreSideM=stdM({color:'#c49a6c'});
+const coreCapM=stdM({map:coreCapTex});
+const stripM=stdM({color:'#fffdf7',roughness:0.95});
+const tailM=stdM({color:'#fffdf7',roughness:0.95,side:THREE.DoubleSide});
+const yarnSideM=stdM({roughness:1}), yarnCapM=stdM({roughness:1}), yarnBallM=stdM({roughness:1}), yarnLineM=stdM({roughness:1});
+function applyColor(){
+  for(const [m,t] of [[yarnSideM,yarnSideTex(S.color)],[yarnCapM,yarnCapTex(S.color)],[yarnBallM,yarnBallTex(S.color)]]){
+    if(m.map) m.map.dispose(); m.map=t; m.needsUpdate=true;
+  }
+  yarnLineM.color.set(S.color);
+}
+applyColor();
+
+function shadowed(m){ m.castShadow=true; m.receiveShadow=true; return m; }
+function cylX(r,len,seg,mats){
+  const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,len,seg,1),mats);
+  m.rotation.z=Math.PI/2; return shadowed(m);
+}
+function box(w,h,d,mat,x,y,z,parent=scene){
+  const m=shadowed(new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat)); m.position.set(x,y,z); parent.add(m); return m;
+}
+
+// podložka a stín
+box(4.8,0.14,4.0,baseM,0,-0.07,-0.6);
+const floor=new THREE.Mesh(new THREE.PlaneGeometry(40,40),new THREE.ShadowMaterial({opacity:0.12}));
+floor.rotation.x=-Math.PI/2; floor.position.y=-0.14; floor.receiveShadow=true; scene.add(floor);
+
+// stojan s tyčí
+box(0.18,1.8,0.32,woodM,-1.8,0.9,0);
+box(0.18,1.8,0.32,woodM, 1.8,0.9,0);
+const rodG=new THREE.Group(); rodG.position.set(0,ROD_Y,0); scene.add(rodG);
+rodG.add(cylX(R0,4.0,32,woodM));
+for(const x of [-2.04,2.04]){ const d=cylX(0.24,0.08,48,[woodM,rodCapM,rodCapM]); d.position.x=x; rodG.add(d); }
+const paperW=cylX(1,1,64,[paperSideM,paperCapM,paperCapM]); rodG.add(paperW);
+const yarnW=cylX(1,1,64,[yarnSideM,yarnCapM,yarnCapM]); rodG.add(yarnW);
+
+// držák role papíru
+const holder=new THREE.Group(); scene.add(holder);
+box(0.14,0.95,0.26,woodM,-0.75,0.475,SRC_Z,holder);
+box(0.14,0.95,0.26,woodM, 0.75,0.475,SRC_Z,holder);
+const axle=cylX(0.06,1.7,16,woodM); axle.position.set(0,SRC_Y,SRC_Z); holder.add(axle);
+const srcG=new THREE.Group(); srcG.position.set(0,SRC_Y,SRC_Z); scene.add(srcG);
+const paperS=cylX(1,1,64,[paperSideM,paperCapM,paperCapM]); srcG.add(paperS);
+srcG.add(cylX(MAT.paper.rc,1.04,32,[coreSideM,coreCapM,coreCapM]));
+
+// klubko
+const ball=shadowed(new THREE.Mesh(new THREE.SphereGeometry(1,48,32),yarnBallM)); scene.add(ball);
+
+// pruh papíru / nit
+const strip=shadowed(new THREE.Mesh(new THREE.BoxGeometry(1,1,1),stripM)); scene.add(strip);
+const yarnLine=shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.022,0.022,1,8),yarnLineM)); scene.add(yarnLine);
+
+// volný konec (po dotočení)
+const TN=24;
+const tailGeo=new THREE.BufferGeometry();
+const tailPos=new Float32Array(TN*2*3);
+tailGeo.setAttribute('position',new THREE.BufferAttribute(tailPos,3));
+{ const idx=[]; for(let i=0;i<TN-1;i++){const a=i*2; idx.push(a,a+2,a+1, a+1,a+2,a+3);} tailGeo.setIndex(idx); }
+const tailMesh=shadowed(new THREE.Mesh(tailGeo,tailM)); tailMesh.frustumCulled=false; tailMesh.visible=false; scene.add(tailMesh);
+const yarnTail=shadowed(new THREE.Mesh(new THREE.BufferGeometry(),yarnLineM)); yarnTail.frustumCulled=false; yarnTail.visible=false; scene.add(yarnTail);
+let tail=null, tAcc=0;
+const H=1/120;
+
+const _a=new THREE.Vector3(), _b=new THREE.Vector3(), _d=new THREE.Vector3(), _p=new THREE.Vector3(), _up=new THREE.Vector3(0,1,0);
+function setStrip(a,b,w){ strip.position.copy(a).add(b).multiplyScalar(0.5); strip.lookAt(b); strip.scale.set(w,0.012,a.distanceTo(b)); }
+function setLine(a,b){
+  yarnLine.position.copy(a).add(b).multiplyScalar(0.5);
+  _d.subVectors(b,a); const len=_d.length();
+  yarnLine.quaternion.setFromUnitVectors(_up,_d.normalize()); yarnLine.scale.set(1,len,1);
+}
+function tangent(z1,y1,r1,z2,y2,r2){
+  const dz=z2-z1, dy=y2-y1, d=Math.hypot(dz,dy), base=Math.atan2(dy,dz);
+  const a=Math.acos(clamp((r1-r2)/d,-1,1)); let best=null;
+  for(const t of [base+a,base-a]){
+    const c={z1:z1+r1*Math.cos(t),y1:y1+r1*Math.sin(t),z2:z2+r2*Math.cos(t),y2:y2+r2*Math.sin(t)};
+    if(!best||c.y1+c.y2<best.y1+best.y2) best=c;
+  }
+  return best;
+}
+
+// ---- fyzika volného konce ----
+function startTail(){
+  const isP=S.material==='paper', rr=rW()+0.004;
+  const t=tangent(0,ROD_Y,rr,SRC_Z,isP?SRC_Y:0.01,isP?C.rc:0.01);
+  const len=Math.hypot(t.z2-t.z1,t.y2-t.y1);
+  tail={z:[],y:[],pz:[],py:[],seg:len/(TN-1),r:rr,psi0:Math.atan2(t.y1-ROD_Y,t.z1),ang0:angle,
+        x:Math.sin(angle*0.35)*(C.w/2-0.06)};
+  for(let i=0;i<TN;i++){
+    const f=i/(TN-1), z=t.z1+(t.z2-t.z1)*f, y=t.y1+(t.y2-t.y1)*f;
+    tail.z.push(z); tail.y.push(y); tail.pz.push(z); tail.py.push(y);
+  }
+  // malé "šoupnutí" konce při uvolnění
+  const last=TN-1; tail.pz[last]-=0.012; tail.py[last]+=0.01;
+  tAcc=0;
+}
+function pushOut(i,cz,cy,R){
+  const T=tail, dz=T.z[i]-cz, dy=T.y[i]-cy, d=Math.hypot(dz,dy);
+  if(d<R&&d>1e-6){ T.z[i]=cz+dz/d*R; T.y[i]=cy+dy/d*R; }
+}
+function stepTail(){
+  const T=tail, G=-8, dmp=0.99, isP=S.material==='paper';
+  for(let i=1;i<TN;i++){
+    const vz=(T.z[i]-T.pz[i])*dmp, vy=(T.y[i]-T.py[i])*dmp;
+    T.pz[i]=T.z[i]; T.py[i]=T.y[i];
+    T.z[i]+=vz; T.y[i]+=vy+G*H*H;
+  }
+  const psi=T.psi0+(angle-T.ang0);
+  T.z[0]=T.pz[0]=T.r*Math.cos(psi); T.y[0]=T.py[0]=ROD_Y+T.r*Math.sin(psi);
+  const minR=T.r+0.012, minC=C.rc+0.012;
+  for(let it=0;it<12;it++){
+    for(let i=0;i<TN-1;i++){
+      const dz=T.z[i+1]-T.z[i], dy=T.y[i+1]-T.y[i], d=Math.hypot(dz,dy)||1e-6, k=(d-T.seg)/d;
+      if(i===0){ T.z[1]-=dz*k; T.y[1]-=dy*k; }
+      else { T.z[i]+=dz*k*0.5; T.y[i]+=dy*k*0.5; T.z[i+1]-=dz*k*0.5; T.y[i+1]-=dy*k*0.5; }
+    }
+    for(let i=1;i<TN;i++){
+      pushOut(i,0,ROD_Y,minR);
+      if(isP) pushOut(i,SRC_Z,SRC_Y,minC);
+      if(T.y[i]<0.008) T.y[i]=0.008;
+    }
+  }
+  for(let i=1;i<TN;i++) if(T.y[i]<=0.0081){ T.pz[i]=T.z[i]-(T.z[i]-T.pz[i])*0.5; T.py[i]=T.y[i]; }
+}
+function drawTail(){
+  const isP=S.material==='paper';
+  tailMesh.visible=isP&&!!tail; yarnTail.visible=!isP&&!!tail;
+  if(!tail) return;
+  if(isP){
+    const hw=C.w/2;
+    for(let i=0;i<TN;i++){
+      const o=i*6;
+      tailPos[o]=-hw; tailPos[o+1]=tail.y[i]; tailPos[o+2]=tail.z[i];
+      tailPos[o+3]= hw; tailPos[o+4]=tail.y[i]; tailPos[o+5]=tail.z[i];
+    }
+    tailGeo.attributes.position.needsUpdate=true; tailGeo.computeVertexNormals();
+  }else{
+    const pts=[]; for(let i=0;i<TN;i++) pts.push(new THREE.Vector3(tail.x,tail.y[i],tail.z[i]));
+    yarnTail.geometry.dispose();
+    yarnTail.geometry=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),48,0.022,6,false);
+  }
+}
+
+function updateScene(){
+  const r=rW(), rs=rS(), isP=S.material==='paper', rr=r+0.004;
+  rodG.rotation.x=-angle;
+  paperW.visible=isP; yarnW.visible=!isP; holder.visible=isP; srcG.visible=isP;
+  if(isP){
+    paperW.scale.set(rr,C.w,rr);
+    paperS.visible=rs>C.rc+0.005; paperS.scale.set(rs,C.w,rs);
+    srcG.rotation.x=-srcAngle;
+    ball.visible=false;
+  }else{
+    yarnW.scale.set(rr,C.w,rr);
+    ball.visible=rs>0.02; ball.position.set(0,rs,SRC_Z); ball.scale.setScalar(Math.max(rs,0.001));
+    ball.rotation.set(-srcAngle,0,Math.sin(srcAngle*0.3)*0.3);
+  }
+  if(!finished){
+    const xs=Math.sin(angle*0.35)*(C.w/2-0.06);
+    const sy=isP?SRC_Y:rs, t=tangent(0,ROD_Y,rr,SRC_Z,sy,Math.max(rs,0.01));
+    if(isP){ _a.set(0,t.y1,t.z1); _b.set(0,t.y2,t.z2); setStrip(_a,_b,C.w); }
+    else   { _a.set(xs,t.y1,t.z1); _b.set(0,t.y2,t.z2); setLine(_a,_b); }
+    strip.visible=isP; yarnLine.visible=!isP;
+    tailMesh.visible=false; yarnTail.visible=false;
+  }else{
+    strip.visible=false; yarnLine.visible=false;
+    drawTail();
+  }
+}
+
+// ================= Kamera =================
+const VIEWS={angle:{az:0.85,el:0.42,dist:7.2}, side:{az:Math.PI/2,el:0.12,dist:7}, front:{az:0,el:0.18,dist:7.2}, top:{az:0,el:1.3,dist:7}};
+const TARGET=new THREE.Vector3(0,0.9,-0.6);
+let cam={...VIEWS[S.view]||VIEWS.angle}, camT={...cam};
+function setView(v){
+  const P=VIEWS[v]; S.view=v; save();
+  camT={az:P.az+2*Math.PI*Math.round((cam.az-P.az)/(2*Math.PI)), el:P.el, dist:P.dist};
+  refreshUI();
+}
+function updateCamera(dt){
+  const k=Math.min(1,dt*5);
+  for(const key of ['az','el','dist']) cam[key]+=(camT[key]-cam[key])*k;
+  const d=cam.dist*(camera.aspect<1?1.5:1);
+  camera.position.set(TARGET.x+d*Math.cos(cam.el)*Math.sin(cam.az), TARGET.y+d*Math.sin(cam.el), TARGET.z+d*Math.cos(cam.el)*Math.cos(cam.az));
+  camera.lookAt(TARGET);
+}
+function resize(){
+  renderer.setSize(innerWidth,innerHeight);
+  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+}
+
+// ================= Zvuk =================
+let ac,master,noiseFilter,noiseGain,osc,oscGain,noiseBuf;
+function initAudio(){
+  if(ac){ if(ac.state!=='running') ac.resume(); return; }
+  ac=new (window.AudioContext||window.webkitAudioContext)();
+  master=ac.createGain(); master.gain.value=S.volume; master.connect(ac.destination);
+  const len=ac.sampleRate*2; noiseBuf=ac.createBuffer(1,len,ac.sampleRate); const d=noiseBuf.getChannelData(0);
+  for(let i=0;i<len;i++) d[i]=Math.random()*2-1;
+  const src=ac.createBufferSource(); src.buffer=noiseBuf; src.loop=true;
+  noiseFilter=ac.createBiquadFilter(); noiseFilter.type='bandpass'; noiseFilter.Q.value=0.8;
+  noiseGain=ac.createGain(); noiseGain.gain.value=0;
+  src.connect(noiseFilter); noiseFilter.connect(noiseGain); noiseGain.connect(master); src.start();
+  osc=ac.createOscillator(); osc.type='sine';
+  const lp=ac.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=1500;
+  oscGain=ac.createGain(); oscGain.gain.value=0;
+  osc.connect(lp); lp.connect(oscGain); oscGain.connect(master); osc.start();
+}
+function updateAudio(){
+  if(!ac) return;
+  const now=ac.currentTime, k=0.06, pp=S.pitch==='up'?p:1-p, s=finished?0:sSm;
+  if(S.material==='paper'){
+    if(noiseFilter.type!=='bandpass') noiseFilter.type='bandpass';
+    if(osc.type!=='sine') osc.type='sine';
+    noiseFilter.frequency.setTargetAtTime(500*Math.pow(2,pp*2.5)*(1+0.2*s),now,k);
+    noiseGain.gain.setTargetAtTime(s*(0.2+0.6*pp),now,k);
+    osc.frequency.setTargetAtTime(120*Math.pow(2,pp*2)*(1+0.1*s),now,k);
+    oscGain.gain.setTargetAtTime(s*(0.04+0.08*pp),now,k);
+  }else{
+    if(noiseFilter.type!=='lowpass') noiseFilter.type='lowpass';
+    if(osc.type!=='triangle') osc.type='triangle';
+    noiseFilter.frequency.setTargetAtTime(300+600*pp,now,k);
+    noiseGain.gain.setTargetAtTime(s*0.08,now,k);
+    osc.frequency.setTargetAtTime(140*Math.pow(2,pp*2)*(1+0.1*s),now,k);
+    oscGain.gain.setTargetAtTime(s*(0.12+0.25*pp),now,k);
+  }
+  master.gain.setTargetAtTime(S.volume,now,0.1);
+}
+function tick(){
+  if(!ac) return; const o=ac.createOscillator(),g=ac.createGain(),t0=ac.currentTime;
+  o.type='sine'; o.frequency.value=900; g.gain.setValueAtTime(0.1,t0);
+  g.gain.exponentialRampToValueAtTime(0.001,t0+0.06);
+  o.connect(g); g.connect(master); o.start(t0); o.stop(t0+0.08);
+}
+function swoosh(){
+  if(!ac) return;
+  const s=ac.createBufferSource(), f=ac.createBiquadFilter(), g=ac.createGain(), t0=ac.currentTime;
+  const isP=S.material==='paper';
+  s.buffer=noiseBuf; f.type='bandpass'; f.Q.value=1.2;
+  f.frequency.setValueAtTime(isP?2800:1200,t0); f.frequency.exponentialRampToValueAtTime(isP?500:300,t0+0.45);
+  g.gain.setValueAtTime(0,t0); g.gain.linearRampToValueAtTime(isP?0.35:0.2,t0+0.04);
+  g.gain.exponentialRampToValueAtTime(0.001,t0+0.5);
+  s.connect(f); f.connect(g); g.connect(master); s.start(t0); s.stop(t0+0.55);
+}
+function chime(){
+  if(!ac) return;
+  [523.25,659.25,783.99,1046.5].forEach((f,i)=>{
+    const o=ac.createOscillator(),g=ac.createGain(),t0=ac.currentTime+i*0.2;
+    o.type='sine'; o.frequency.value=f;
+    g.gain.setValueAtTime(0,t0); g.gain.linearRampToValueAtTime(0.16,t0+0.03);
+    g.gain.exponentialRampToValueAtTime(0.001,t0+1.2);
+    o.connect(g); g.connect(master); o.start(t0); o.stop(t0+1.3);
+  });
+}
+
+// ================= Točení =================
+function spin(d){
+  if(finished){ angle+=d; return; }   // po konci se tyč dál točí, konec papíru se plácá
+  angle+=d;
+  const r=rW(), rs=Math.max(rS(),0.06);
+  const amt=S.reverse==='unwind'?d:Math.abs(d);
+  p=clamp(p+amt*r/total,0,1);
+  srcAngle+=d*r/rs;
+  turnAcc+=Math.abs(d); totalTurn+=Math.abs(d);
+  if(turnAcc>=2*Math.PI){ turnAcc-=2*Math.PI; if(S.ticks==='on') tick(); }
+  if(p>=1) finish();
+}
+function finish(){
+  finished=true; vel=clamp(vel,-6,6);
+  startTail(); swoosh();
+  if(S.endSound==='on') setTimeout(()=>{ if(finished) chime(); },500);
+  if(auto&&S.loop==='on') loopT=setTimeout(restart,4000);
+  else setTimeout(()=>{ if(finished) againBtn.style.display='block'; },1500);
+}
+function restart(){
+  clearTimeout(loopT); p=0; finished=false; vel=0; tail=null;
+  tailMesh.visible=false; yarnTail.visible=false;
+  againBtn.style.display='none';
+}
+
+// ================= Dotyk =================
+const rodC=new THREE.Vector3(0,ROD_Y,0);
+function toScreen(v){ _p.copy(v).project(camera); return {x:(_p.x+1)/2*innerWidth, y:(1-_p.y)/2*innerHeight}; }
+function screenR(){
+  const c=toScreen(rodC), r=rW();
+  const a=toScreen(_a.set(0,ROD_Y+r,0)), b=toScreen(_b.set(0,ROD_Y,r));
+  return Math.max(40,Math.hypot(a.x-c.x,a.y-c.y),Math.hypot(b.x-c.x,b.y-c.y));
+}
+const ptrs=new Map(); let orbit=false, oPrev=null;
+function two(){ const v=[...ptrs.values()], a=v[0], b=v[1]; return {x:(a.x+b.x)/2,y:(a.y+b.y)/2,d:Math.hypot(a.x-b.x,a.y-b.y)}; }
+
+cv.addEventListener('pointerdown',e=>{
+  initAudio();
+  cv.setPointerCapture(e.pointerId);
+  ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(ptrs.size===1&&!orbit){
+    pid=e.pointerId; touching=true; vel=0;
+    const c=toScreen(rodC); lastA=Math.atan2(e.clientY-c.y,e.clientX-c.x);
+    lastY=e.clientY; lastMoveT=performance.now();
+  }else if(ptrs.size===2&&S.twoFinger==='on'){
+    pid=null; touching=false; orbit=true; oPrev=two();
+  }
+});
+cv.addEventListener('pointermove',e=>{
+  const pt=ptrs.get(e.pointerId); if(!pt) return;
+  pt.x=e.clientX; pt.y=e.clientY;
+  if(orbit){
+    if(ptrs.size>=2){
+      const n=two();
+      camT.az-=(n.x-oPrev.x)*0.006;
+      camT.el=clamp(camT.el+(n.y-oPrev.y)*0.006,0.03,1.45);
+      if(oPrev.d>10&&n.d>10) camT.dist=clamp(camT.dist*oPrev.d/n.d,4,12);
+      oPrev=n; document.querySelectorAll('#viewBar button').forEach(b=>b.classList.remove('sel'));
+    }
+    return;
+  }
+  if(e.pointerId!==pid) return;
+  const c=toScreen(rodC), dx=e.clientX-c.x, dy=e.clientY-c.y, a=Math.atan2(dy,dx);
+  let dc=a-lastA; if(dc>Math.PI) dc-=2*Math.PI; if(dc<-Math.PI) dc+=2*Math.PI; lastA=a;
+  if(Math.hypot(dx,dy)<25) dc=0;
+  const dv=(e.clientY-lastY)/screenR(); lastY=e.clientY;
+  _d.copy(camera.position).sub(rodC).normalize();
+  const w=Math.min(1,Math.abs(_d.x)*1.5);
+  const d=w*dc*(_d.x>=0?1:-1)+(1-w)*(-dv*(_d.z>=0?1:-1));
+  const now=performance.now(), dt=Math.max(0.008,(now-lastMoveT)/1000); lastMoveT=now;
+  vel=vel*0.6+clamp(d/dt,-30,30)*0.4;
+  spin(finished?clamp(d,-0.15,0.15):d);
+});
+const up=e=>{
+  ptrs.delete(e.pointerId);
+  if(e.pointerId===pid){ pid=null; touching=false; if(finished) vel=clamp(vel,-8,8); }
+  if(ptrs.size===0) orbit=false;
+};
+cv.addEventListener('pointerup',up); cv.addEventListener('pointercancel',up);
+
+// ================= Nápověda =================
+const hint=document.getElementById('hint');
+function updateHint(){
+  const show=totalTurn<Math.PI*3&&!finished&&!auto;
+  hint.style.display=show?'block':'none';
+  if(show){ const c=toScreen(rodC); hint.style.transform=`translate(${c.x}px,${c.y}px)`; }
+}
+
+// ================= Smyčka =================
+let last=performance.now();
+renderer.setAnimationLoop(()=>{
+  const t=performance.now(), dt=Math.min(0.05,(t-last)/1000); last=t;
+  if(!touching){
+    if(auto&&!finished){ vel+=(SPEEDS[S.autoSpeed]-vel)*Math.min(1,dt*2.5); spin(vel*dt); }
+    else if(Math.abs(vel)>0.05){ spin(vel*dt); vel*=Math.exp(-(finished?2.5:1.6)*dt); }
+    else vel=0;
+  }else if(t-lastMoveT>80){ vel*=Math.exp(-12*dt); }
+  if(finished&&tail){ tAcc+=dt; while(tAcc>=H){ stepTail(); tAcc-=H; } }
+  sSm+=(Math.min(1,Math.abs(vel)/10)-sSm)*Math.min(1,dt*10);
+  updateAudio(); updateScene(); updateCamera(dt); updateHint();
+  renderer.render(scene,camera);
+});
+
+// ================= Ovládání =================
+const panel=document.getElementById('panel'), gear=document.getElementById('gear');
+const againBtn=document.getElementById('again'), autoBtn=document.getElementById('autoBtn');
+let holdT=null;
+gear.addEventListener('pointerdown',e=>{
+  e.preventDefault(); gear.classList.add('hold');
+  holdT=setTimeout(()=>{ gear.classList.remove('hold'); refreshUI(); panel.style.display='flex'; },1500);
+});
+['pointerup','pointerleave','pointercancel'].forEach(ev=>gear.addEventListener(ev,()=>{ clearTimeout(holdT); gear.classList.remove('hold'); }));
+document.getElementById('closeBtn').onclick=()=>panel.style.display='none';
+document.getElementById('resetBtn').onclick=()=>{ restart(); panel.style.display='none'; };
+againBtn.onclick=()=>{ initAudio(); restart(); };
+autoBtn.onclick=()=>{ initAudio(); auto=!auto; if(auto&&finished) restart(); refreshUI(); };
+document.querySelectorAll('.spd button').forEach(b=>b.onclick=()=>{
+  initAudio(); S.autoSpeed=b.dataset.s; save(); if(!auto){ auto=true; if(finished) restart(); } refreshUI();
+});
+document.querySelectorAll('#viewBar button').forEach(b=>b.onclick=()=>setView(b.dataset.view));
+const vol=document.getElementById('vol');
+vol.oninput=()=>{ S.volume=parseFloat(vol.value); save(); };
+document.querySelectorAll('.opts').forEach(boxEl=>{
+  boxEl.addEventListener('click',e=>{
+    const b=e.target.closest('button'); if(!b) return;
+    const k=boxEl.dataset.k; S[k]=b.dataset.v; save();
+    if(k==='material'){ recompute(); restart(); }
+    if(k==='length') recompute();
+    if(k==='color') applyColor();
+    refreshUI();
+  });
+});
+function refreshUI(){
+  document.querySelectorAll('.opts').forEach(boxEl=>{
+    boxEl.querySelectorAll('button').forEach(b=>b.classList.toggle('sel',S[boxEl.dataset.k]===b.dataset.v));
+  });
+  vol.value=S.volume;
+  document.getElementById('colorRow').style.display=S.material==='yarn'?'flex':'none';
+  document.getElementById('autoBar').style.display=S.autoBtns==='on'?'flex':'none';
+  document.getElementById('viewBar').style.display=S.viewBtns==='on'?'flex':'none';
+  autoBtn.textContent=auto?'⏸️ Stop':'▶️ Samo'; autoBtn.classList.toggle('on',auto);
+  document.querySelectorAll('.spd button').forEach(b=>b.classList.toggle('sel',b.dataset.s===S.autoSpeed));
+  document.querySelectorAll('#viewBar button').forEach(b=>b.classList.toggle('sel',b.dataset.view===S.view));
+}
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&ac&&ac.state!=='running') ac.resume(); });
+document.addEventListener('gesturestart',e=>e.preventDefault());
+addEventListener('resize',resize);
+resize(); refreshUI();
+</script>
+</body>
+</html>
